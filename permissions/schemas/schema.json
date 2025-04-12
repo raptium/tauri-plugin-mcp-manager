@@ -307,18 +307,6 @@
           "markdownDescription": "Denies the kill_mcp_server command without any pre-configured scope."
         },
         {
-          "description": "Enables the ping command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-ping",
-          "markdownDescription": "Enables the ping command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the ping command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-ping",
-          "markdownDescription": "Denies the ping command without any pre-configured scope."
-        },
-        {
           "description": "Enables the send_to_mcp_server command without any pre-configured scope.",
           "type": "string",
           "const": "allow-send-to-mcp-server",
@@ -329,18 +317,6 @@
           "type": "string",
           "const": "deny-send-to-mcp-server",
           "markdownDescription": "Denies the send_to_mcp_server command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the spawn_mcp_server command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-spawn-mcp-server",
-          "markdownDescription": "Enables the spawn_mcp_server command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the spawn_mcp_server command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-spawn-mcp-server",
-          "markdownDescription": "Denies the spawn_mcp_server command without any pre-configured scope."
         },
         {
           "description": "Enables the start_mcp_server command without any pre-configured scope.",
@@ -355,10 +331,10 @@
           "markdownDescription": "Denies the start_mcp_server command without any pre-configured scope."
         },
         {
-          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-ping`",
+          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-start-mcp-server`\n- `allow-send-to-mcp-server`\n- `allow-kill-mcp-server`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-ping`"
+          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-start-mcp-server`\n- `allow-send-to-mcp-server`\n- `allow-kill-mcp-server`"
         }
       ]
     }

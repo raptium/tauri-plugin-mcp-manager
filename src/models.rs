@@ -1,19 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PingRequest {
-  pub value: Option<String>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PingResponse {
-  pub value: Option<String>,
-}
-
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StdioServerParams {
     pub command: String,
     pub args: Vec<String>,
@@ -21,33 +10,36 @@ pub struct StdioServerParams {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StartRequest {
-    pub name: String,
     pub params: StdioServerParams,
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StartResponse {
     pub server_id: String,
-    pub name: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct ServerNamePayload {
-    pub name: String,
-}
-
-pub type KillRequest = ServerNamePayload;
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct SendRequest {
-    pub name: String,
-    pub data: String,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct ServerMessagePayload {
+#[serde(rename_all = "camelCase")]
+pub struct ServerIdPayload {
     pub server_id: String,
-    pub name: String,
+}
+
+pub type KillRequest = ServerIdPayload;
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SendRequest {
+    pub server_id: String,
     pub data: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", content = "payload", rename_all = "camelCase")]
+pub enum ServerEvent {
+    Stdout(Vec<u8>),
+    Stderr(Vec<u8>),
+    Exit(Option<i32>),
 }

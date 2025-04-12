@@ -8,16 +8,16 @@ pub enum Error {
   Command(std::io::Error),
   #[error("Could not get stdio pipe")]
   Pipe,
+  #[error("Could not obtain process ID after spawning")]
+  ProcessIdUnavailable,
   #[error("Server with ID '{0}' not found")]
   ServerNotFound(String),
   #[error("Server with name '{0}' already exists")]
   ServerNameExists(String),
+  #[error("Failed to send kill signal to server '{0}'")]
+  KillSignalFailed(String),
   #[error(transparent)]
   Io(#[from] std::io::Error),
-  // Remove mobile conditional compilation for PluginInvokeError
-  // #[cfg(mobile)]
-  // #[error(transparent)]
-  // PluginInvoke(#[from] tauri::plugin::mobile::PluginInvokeError),
 }
 
 impl Serialize for Error {

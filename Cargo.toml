@@ -1,12 +1,12 @@
 [package]
-name = "tauri-plugin-tauri-plugin-mcp-manager"
+name = "tauri-plugin-mcp-manager"
 version = "0.1.0"
 authors = [ "You" ]
 description = ""
 edition = "2021"
 rust-version = "1.77.2"
 exclude = ["/examples", "/dist-js", "/guest-js", "/node_modules"]
-links = "tauri-plugin-tauri-plugin-mcp-manager"
+links = "tauri-plugin-mcp-manager"
 
 [dependencies]
 tauri = { version = "2.4.0" }
@@ -14,6 +14,7 @@ serde = "1.0"
 thiserror = "2"
 tokio = { version = "1.44.2", features = ["process", "sync", "rt-multi-thread", "io-util", "macros"] }
 uuid = { version = "1.16.0", features = ["v4", "fast-rng", "macro-diagnostics"] }
+sysinfo = { version = "0.34"}
 
 [build-dependencies]
 tauri-plugin = { version = "2.1.0", features = ["build"] }

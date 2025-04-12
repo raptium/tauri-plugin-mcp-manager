@@ -7,6 +7,6 @@
   ],
   "permissions": [
     "core:default",
-    "tauri-plugin-mcp-manager:default"
+    "mcp-manager:default"
   ]
 }

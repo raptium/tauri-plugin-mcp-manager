@@ -1,7 +1,7 @@
 use serde::de::DeserializeOwned;
 use tauri::{plugin::PluginApi, AppHandle, Emitter, Runtime};
 use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+    io::{AsyncWriteExt, BufReader, AsyncReadExt},
     process::{Child, ChildStdin, Command},
     sync::Mutex,
 };
@@ -9,51 +9,38 @@ use uuid::Uuid;
 
 use crate::models::*;
 use std::{collections::HashMap, process::Stdio, sync::Arc};
+// Add sysinfo imports
+use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 
-// Helper struct to store process information
-#[derive(Debug)]
+// Helper struct stores only stdin handle and PID
+#[derive(Debug, Clone)]
 struct ManagedProcess {
-    child: Child,
-    stdin: ChildStdin,
+    pid: u32,
+    stdin: Arc<Mutex<ChildStdin>>,
 }
 
 pub fn init<R: Runtime, C: DeserializeOwned>(
     app: &AppHandle<R>,
     _api: PluginApi<R, C>,
-) -> crate::Result<TauriPluginMcpManager<R>> {
-    Ok(TauriPluginMcpManager {
+) -> crate::Result<McpManager<R>> {
+    Ok(McpManager {
         app_handle: app.clone(),
-        // Map key: server_id (UUID string), Map value: (name, ManagedProcess)
-        servers: Arc::new(Mutex::new(HashMap::new())),
+        // Update the HashMap value type
+        servers: Arc::new(Mutex::new(HashMap::<String, ManagedProcess>::new())),
     })
 }
 
 /// Access to the tauri-plugin-mcp-manager APIs.
 #[derive(Debug)]
-pub struct TauriPluginMcpManager<R: Runtime> {
+pub struct McpManager<R: Runtime> {
     app_handle: AppHandle<R>,
-    servers: Arc<Mutex<HashMap<String, (String, ManagedProcess)>>>,
+    // Update the HashMap value type
+    servers: Arc<Mutex<HashMap<String, ManagedProcess>>>, // Holds PID + stdin
 }
 
-impl<R: Runtime> TauriPluginMcpManager<R> {
-    pub fn ping(&self, payload: PingRequest) -> crate::Result<PingResponse> {
-        Ok(PingResponse {
-            value: payload.value,
-        })
-    }
-
-    // Renamed from spawn_mcp_server
+impl<R: Runtime> McpManager<R> {
     pub async fn start_mcp_server(&self, payload: StartRequest) -> crate::Result<StartResponse> {
-        // Check if name already exists
-        {
-            let servers_guard = self.servers.lock().await;
-            if servers_guard.values().any(|(name, _)| name == &payload.name) {
-                return Err(crate::Error::ServerNameExists(payload.name.clone())); // Clone name for error
-            }
-        }
-
         let server_id = Uuid::new_v4().to_string();
-        // Access command, args, env via payload.params
         let mut cmd = Command::new(&payload.params.command);
         cmd.args(&payload.params.args);
         cmd.stdout(Stdio::piped());
@@ -65,134 +52,201 @@ impl<R: Runtime> TauriPluginMcpManager<R> {
         }
 
         #[cfg(windows)]
-        cmd.creation_flags(0x08000000);
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
 
         let mut child = cmd.spawn().map_err(|e| crate::Error::Command(e))?;
 
-        let stdout = child.stdout.take().ok_or(crate::Error::Pipe)?;
-        let stderr = child.stderr.take().ok_or(crate::Error::Pipe)?;
-        let stdin = child.stdin.take().ok_or(crate::Error::Pipe)?;
+        let pid = child.id().ok_or(crate::Error::ProcessIdUnavailable)?;
+        let stdout = child.stdout.take().ok_or(crate::Error::Pipe)?; // Take stdout
+        let stderr = child.stderr.take().ok_or(crate::Error::Pipe)?; // Take stderr
+        let stdin = Arc::new(Mutex::new(child.stdin.take().ok_or(crate::Error::Pipe)?)); // Take and wrap stdin
 
-        let managed_process = ManagedProcess {
-            child,
-            stdin,
-        };
-
-        let server_name = payload.name.clone();
-
+        // Store only PID and stdin handle in the map
         {
             let mut servers_guard = self.servers.lock().await;
-            servers_guard.insert(server_id.clone(), (server_name.clone(), managed_process));
+            let managed_process = ManagedProcess {
+                pid,
+                stdin: stdin.clone(), // Clone Arc for map
+            };
+            servers_guard.insert(server_id.clone(), managed_process);
         }
 
-        // Spawn background tasks
+        // Spawn IO listeners
         let app_handle_stdout = self.app_handle.clone();
         let server_id_stdout = server_id.clone();
-        let server_name_stdout = server_name.clone();
         tokio::spawn(async move {
             let reader = BufReader::new(stdout);
-            Self::listen_to_stream(
-                app_handle_stdout,
-                server_id_stdout,
-                server_name_stdout, // Pass name
-                reader,
-                "stdout",
-            )
-            .await;
+            Self::listen_to_stream(app_handle_stdout, server_id_stdout, reader, "stdout").await;
         });
 
         let app_handle_stderr = self.app_handle.clone();
         let server_id_stderr = server_id.clone();
-        let server_name_stderr = server_name.clone();
         tokio::spawn(async move {
             let reader = BufReader::new(stderr);
-            Self::listen_to_stream(
-                app_handle_stderr,
-                server_id_stderr,
-                server_name_stderr, // Pass name
-                reader,
-                "stderr",
-            )
-            .await;
+            Self::listen_to_stream(app_handle_stderr, server_id_stderr, reader, "stderr").await;
         });
 
-        Ok(StartResponse { server_id, name: server_name })
+        // Spawn task to own the Child and wait for exit
+        let app_handle_exit = self.app_handle.clone();
+        let server_id_exit = server_id.clone();
+        let servers_clone_for_cleanup = self.servers.clone(); // Clone Arc<Mutex<Map>> for cleanup
+
+        tokio::spawn(async move {
+            // `child` is moved into this task
+            match child.wait().await { // Wait for the process to exit
+                Ok(status) => {
+                    println!("[{}] Process exited naturally with status: {}", server_id_exit, status);
+                    let event_name = format!("mcp://message/{}", server_id_exit);
+                    // Emit exit event
+                    app_handle_exit.emit(&event_name, ServerEvent::Exit(status.code()))
+                        .map_err(|e| eprintln!("[{}] Failed to emit exit event: {}", server_id_exit, e))
+                        .ok();
+                }
+                Err(e) => {
+                    eprintln!("[{}] Failed to wait for process exit: {}", server_id_exit, e);
+                    let event_name = format!("mcp://message/{}", server_id_exit);
+                    // Emit exit event with None status code on wait error
+                    app_handle_exit.emit(&event_name, ServerEvent::Exit(None))
+                        .map_err(|e_emit| eprintln!("[{}] Failed to emit error exit event: {}", server_id_exit, e_emit))
+                        .ok();
+                }
+            }
+
+            // Remove the server entry AFTER the process has exited.
+            // This prevents sending to a process that's terminating but hasn't fully exited.
+            {
+                let mut servers_guard = servers_clone_for_cleanup.lock().await;
+                if servers_guard.remove(&server_id_exit).is_some() {
+                    println!("[{}] Removed server entry after process exit.", server_id_exit);
+                } else {
+                    // This could happen if kill_mcp_server was called and removed the entry first.
+                    println!("[{}] Server entry already removed before wait task cleanup (likely via kill).", server_id_exit);
+                }
+            }
+        });
+
+        println!("Started server (PID: {}, ID: {}).", pid, server_id);
+
+        Ok(StartResponse { server_id })
     }
 
+    // Reads from the stream in chunks and emits events eagerly.
     async fn listen_to_stream<T: tokio::io::AsyncRead + Unpin>(
         app_handle: AppHandle<R>,
         server_id: String,
-        name: String, // Accept name
-        stream: T,
+        mut stream: T,
         stream_name: &str,
     ) {
-        let mut reader = BufReader::new(stream).lines();
-        while let Ok(Some(line)) = reader.next_line().await {
-            println!("[{}:{}] {}", name, stream_name, line); // Log with name
-            let event_name = format!("mcp://message/{}", server_id); // Event name still uses unique ID
-            app_handle
-                .emit(
-                    &event_name,
-                    ServerMessagePayload {
-                        server_id: server_id.clone(),
-                        name: name.clone(), // Include name in payload
-                        data: line,
-                    },
-                )
-                .map_err(|e| eprintln!("Failed to emit event: {}", e))
-                .ok();
+        let mut buf = [0; 1024]; // Read buffer
+
+        loop {
+            match stream.read(&mut buf).await {
+                Ok(0) => break, // EOF
+                Ok(n) => {
+                    let data_chunk_bytes = &buf[0..n]; // Reference the raw byte slice
+                    // Log raw bytes using debug format
+                    println!("[{}:{}] {:?}", server_id, stream_name, data_chunk_bytes);
+                    let event_name = format!("mcp://message/{}", server_id);
+                    let event_payload = match stream_name {
+                        // Clone the byte slice into a Vec<u8>
+                        "stdout" => ServerEvent::Stdout(data_chunk_bytes.to_vec()),
+                        "stderr" => ServerEvent::Stderr(data_chunk_bytes.to_vec()),
+                        _ => unreachable!(),
+                    };
+                    app_handle.emit(&event_name, event_payload)
+                        .map_err(|e| eprintln!("[{}] Failed to emit {} event: {}", server_id, stream_name, e))
+                        .ok();
+                }
+                Err(e) => {
+                    eprintln!("[{}] Error reading from {}: {}", server_id, stream_name, e);
+                    break; // Stop reading on error
+                }
+            }
         }
-        println!("[{}:{}] Stream closed.", name, stream_name);
-        // Clean up the server entry when a stream closes? Maybe on kill command?
+        println!("[{}:{}] Stream closed.", server_id, stream_name);
+        // Cleanup is handled by the separate wait task.
     }
 
-    // Updated to find by name
     pub async fn send_to_mcp_server(&self, payload: SendRequest) -> crate::Result<()> {
-        let mut servers_guard = self.servers.lock().await;
-        // Find the server_id and stdin by name
-        let server_info = servers_guard
-            .iter_mut()
-            .find(|(_, (name, _))| name == &payload.name);
+        let stdin_arc = { // Scoped lock to get stdin Arc
+            let servers_guard = self.servers.lock().await;
+            servers_guard.get(&payload.server_id).map(|p| p.stdin.clone()) // Clone stdin Arc if found
+        };
 
-        if let Some((_server_id, (_name, process))) = server_info {
+        if let Some(stdin_arc) = stdin_arc {
+            let mut stdin_guard = stdin_arc.lock().await; // Lock stdin
             let mut data = payload.data;
             if !data.ends_with('\n') {
-                data.push('\n');
+                data.push('\n'); // Ensure newline for stdin
             }
-            process
-                .stdin
-                .write_all(data.as_bytes())
-                .await
-                .map_err(crate::Error::Io)?;
-            Ok(())
+            // Write to stdin
+            match stdin_guard.write_all(data.as_bytes()).await {
+                Ok(_) => Ok(()),
+                Err(e) => {
+                    // If write fails, the process likely exited.
+                    // Map BrokenPipe or other relevant IO errors to ServerNotFound.
+                    if e.kind() == std::io::ErrorKind::BrokenPipe {
+                        println!("[{}] Send failed: Pipe broken (process likely exited).", payload.server_id);
+                        Err(crate::Error::ServerNotFound(payload.server_id))
+                    } else {
+                        eprintln!("[{}] Error writing to stdin: {}", payload.server_id, e);
+                        Err(crate::Error::Io(e))
+                    }
+                }
+            }
         } else {
-            Err(crate::Error::ServerNotFound(payload.name)) // Error uses name
+            // Not found in map, could be it exited and was cleaned up, or never existed.
+            println!("[{}] Send failed: Server not found in map.", payload.server_id);
+            Err(crate::Error::ServerNotFound(payload.server_id))
         }
     }
 
-    // Updated to find by name
     pub async fn kill_mcp_server(&self, payload: KillRequest) -> crate::Result<()> {
-        let mut servers_guard = self.servers.lock().await;
-        let server_id_to_remove = servers_guard
-            .iter()
-            .find(|(_, (name, _))| name == &payload.name)
-            .map(|(id, _)| id.clone());
+        let managed_process = {
+            let mut servers_guard = self.servers.lock().await; // Lock map
+            // Remove the entry to prevent further sends and get PID
+            servers_guard.remove(&payload.server_id)
+        };
 
-        if let Some(server_id) = server_id_to_remove {
-            if let Some((name, mut managed_process)) = servers_guard.remove(&server_id) {
-                managed_process
-                    .child
-                    .kill()
-                    .await
-                    .map_err(crate::Error::Io)?;
-                println!("Killed server {} (ID: {})", name, server_id);
+        if let Some(process_info) = managed_process {
+            let pid_to_kill = Pid::from_u32(process_info.pid);
+            println!("[{}] Attempting to kill process with PID: {}", payload.server_id, pid_to_kill);
+
+            // Use sysinfo to kill the process by PID
+            let mut sys = System::new();
+            // Refresh specific process info for potentially better performance than refresh_all()
+            // If this fails (e.g., process already gone), kill will likely fail too.
+            sys.refresh_processes(ProcessesToUpdate::Some(&[pid_to_kill]), true);
+
+            let killed = match sys.process(pid_to_kill) {
+                Some(process) => {
+                    if process.kill() {
+                         println!("[{}] Kill signal sent successfully to PID: {}. Wait task will handle exit event.", payload.server_id, pid_to_kill);
+                         true
+                    } else {
+                         eprintln!("[{}] Failed to send kill signal to PID: {}. Process might have exited already.", payload.server_id, pid_to_kill);
+                         false // Kill signal failed
+                    }
+                }
+                None => {
+                    eprintln!("[{}] Process with PID: {} not found by sysinfo. Already exited?", payload.server_id, pid_to_kill);
+                    false // Process not found
+                }
+            };
+
+            if killed {
                 Ok(())
             } else {
-                // Should technically not happen if ID was found just before
-                Err(crate::Error::ServerNotFound(payload.name))
+                // Even if kill failed, the process might be gone. The wait task handles cleanup.
+                // Return an error to indicate the kill command itself wasn't definitively successful.
+                // We could potentially return Ok here if process not found, depends on desired semantics.
+                Err(crate::Error::KillSignalFailed(payload.server_id.clone()))
             }
+
         } else {
-            Err(crate::Error::ServerNotFound(payload.name)) // Error uses name
+            // Process not found in map, likely already exited naturally and cleaned up by wait task.
+             println!("[{}] Kill failed: Server not found in map (already exited/removed?).", payload.server_id);
+            Err(crate::Error::ServerNotFound(payload.server_id))
         }
     }
 }
