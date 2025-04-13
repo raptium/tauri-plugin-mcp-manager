@@ -1,0 +1,4 @@
+{
+    "*.{js,ts,vue,json,md}": "biome check --write",
+    "*.rs": "cargo fmt"
+}

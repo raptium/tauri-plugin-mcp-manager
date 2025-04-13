@@ -1,24 +1,28 @@
 {
-  "name": "tauri-app",
-  "private": true,
-  "version": "0.1.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "tauri": "tauri"
-  },
-  "dependencies": {
-    "@tauri-apps/api": "^2.0.0",
-    "tauri-plugin-mcp-manager-api": "file:../../",
-    "@modelcontextprotocol/sdk": "^1.9.0"
-  },
-  "devDependencies": {
-    "@vitejs/plugin-vue": "^5.0.0",
-    "vue": "^3.3.0",
-    "vite": "^6.0.0",
-    "@tauri-apps/cli": "^2.0.0",
-    "typescript": "^5.0.0"
-  }
+	"name": "tauri-app",
+	"private": true,
+	"version": "0.1.0",
+	"type": "module",
+	"scripts": {
+		"dev": "vite",
+		"build": "vite build",
+		"preview": "vite preview",
+		"tauri": "tauri",
+		"lint": "biome check --write .",
+		"lint:fix": "biome check --write .",
+		"prepare": "husky"
+	},
+	"dependencies": {
+		"@modelcontextprotocol/sdk": "^1.9.0",
+		"@tauri-apps/api": "^2.0.0",
+		"tauri-plugin-mcp-manager-api": "file:../../"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "1.9.4",
+		"@tauri-apps/cli": "^2.0.0",
+		"@vitejs/plugin-vue": "^5.0.0",
+		"typescript": "^5.0.0",
+		"vite": "^6.0.0",
+		"vue": "^3.3.0"
+	}
 }

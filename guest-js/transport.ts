@@ -25,7 +25,6 @@ export class ReadBuffer {
         // Find the index of the newline character (byte value 10)
         const index = this._buffer.indexOf(10);
         if (index === -1) {
-            console.log("no newline found");
             return null;
         }
         // Decode the relevant part of the buffer to a string
