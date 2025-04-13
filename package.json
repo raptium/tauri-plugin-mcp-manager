@@ -1,8 +1,9 @@
 {
   "name": "tauri-plugin-mcp-manager-api",
   "version": "0.1.0",
-  "author": "You",
+  "author": "Hao Guan <gh@raptium.net>",
   "description": "",
+  "license": "MIT",
   "type": "module",
   "types": "./dist-js/index.d.ts",
   "main": "./dist-js/index.cjs",

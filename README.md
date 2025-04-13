@@ -1,6 +1,8 @@
 # Tauri Plugin tauri-plugin-mcp-manager
 
-**Disclaimer:** This project was created with the assistance of an LLM and is a result of "vibe coding". It may not be stable or suitable for production use. Use at your own risk.
+This Tauri plugin enables seamless integration of Model Context Protocol (MCP) servers using stdio transport in your Tauri applications. It provides a bridge between your Tauri frontend and MCP-compatible AI/ML services, making it easy to spawn, manage, and communicate with MCP server processes.
+
+**Disclaimer:** 🎵 This project was born from the mystical art of vibe coding, where hallucinations meet reality in a dance of semicolons. Some say it was written during a full moon while listening to Baby Shark on repeat (doo doo doo doo doo doo). The code might work, it might not, it might transform into a unicorn - we're not making any promises! Use at your own risk, and remember: just like Baby Shark, this code is catchy but comes with no warranty. 🦈
 
 ## Usage
 
