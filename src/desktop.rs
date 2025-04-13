@@ -2,7 +2,7 @@ use serde::de::DeserializeOwned;
 use tauri::{plugin::PluginApi, AppHandle, Emitter, Runtime};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt, BufReader},
-    process::{Child, ChildStdin, Command},
+    process::{ChildStdin, Command},
     sync::Mutex,
 };
 use uuid::Uuid;
@@ -10,7 +10,7 @@ use uuid::Uuid;
 use crate::models::*;
 use std::{collections::HashMap, process::Stdio, sync::Arc};
 // Add sysinfo imports
-use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
+use sysinfo::{Pid, ProcessesToUpdate, System};
 
 // Helper struct stores only stdin handle and PID
 #[derive(Debug, Clone)]
@@ -163,8 +163,6 @@ impl<R: Runtime> McpManager<R> {
                 Ok(0) => break, // EOF
                 Ok(n) => {
                     let data_chunk_bytes = &buf[0..n]; // Reference the raw byte slice
-                                                       // Log raw bytes using debug format
-                    println!("[{}:{}] {:?}", server_id, stream_name, data_chunk_bytes);
                     let event_name = format!("mcp://message/{}", server_id);
                     let event_payload = match stream_name {
                         // Clone the byte slice into a Vec<u8>
