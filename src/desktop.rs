@@ -1,7 +1,7 @@
 use serde::de::DeserializeOwned;
 use tauri::{plugin::PluginApi, AppHandle, Emitter, Runtime};
 use tokio::{
-    io::{AsyncWriteExt, BufReader, AsyncReadExt},
+    io::{AsyncReadExt, AsyncWriteExt, BufReader},
     process::{Child, ChildStdin, Command},
     sync::Mutex,
 };
@@ -93,21 +93,37 @@ impl<R: Runtime> McpManager<R> {
 
         tokio::spawn(async move {
             // `child` is moved into this task
-            match child.wait().await { // Wait for the process to exit
+            match child.wait().await {
+                // Wait for the process to exit
                 Ok(status) => {
-                    println!("[{}] Process exited naturally with status: {}", server_id_exit, status);
+                    println!(
+                        "[{}] Process exited naturally with status: {}",
+                        server_id_exit, status
+                    );
                     let event_name = format!("mcp://message/{}", server_id_exit);
                     // Emit exit event
-                    app_handle_exit.emit(&event_name, ServerEvent::Exit(status.code()))
-                        .map_err(|e| eprintln!("[{}] Failed to emit exit event: {}", server_id_exit, e))
+                    app_handle_exit
+                        .emit(&event_name, ServerEvent::Exit(status.code()))
+                        .map_err(|e| {
+                            eprintln!("[{}] Failed to emit exit event: {}", server_id_exit, e)
+                        })
                         .ok();
                 }
                 Err(e) => {
-                    eprintln!("[{}] Failed to wait for process exit: {}", server_id_exit, e);
+                    eprintln!(
+                        "[{}] Failed to wait for process exit: {}",
+                        server_id_exit, e
+                    );
                     let event_name = format!("mcp://message/{}", server_id_exit);
                     // Emit exit event with None status code on wait error
-                    app_handle_exit.emit(&event_name, ServerEvent::Exit(None))
-                        .map_err(|e_emit| eprintln!("[{}] Failed to emit error exit event: {}", server_id_exit, e_emit))
+                    app_handle_exit
+                        .emit(&event_name, ServerEvent::Exit(None))
+                        .map_err(|e_emit| {
+                            eprintln!(
+                                "[{}] Failed to emit error exit event: {}",
+                                server_id_exit, e_emit
+                            )
+                        })
                         .ok();
                 }
             }
@@ -117,7 +133,10 @@ impl<R: Runtime> McpManager<R> {
             {
                 let mut servers_guard = servers_clone_for_cleanup.lock().await;
                 if servers_guard.remove(&server_id_exit).is_some() {
-                    println!("[{}] Removed server entry after process exit.", server_id_exit);
+                    println!(
+                        "[{}] Removed server entry after process exit.",
+                        server_id_exit
+                    );
                 } else {
                     // This could happen if kill_mcp_server was called and removed the entry first.
                     println!("[{}] Server entry already removed before wait task cleanup (likely via kill).", server_id_exit);
@@ -144,7 +163,7 @@ impl<R: Runtime> McpManager<R> {
                 Ok(0) => break, // EOF
                 Ok(n) => {
                     let data_chunk_bytes = &buf[0..n]; // Reference the raw byte slice
-                    // Log raw bytes using debug format
+                                                       // Log raw bytes using debug format
                     println!("[{}:{}] {:?}", server_id, stream_name, data_chunk_bytes);
                     let event_name = format!("mcp://message/{}", server_id);
                     let event_payload = match stream_name {
@@ -153,8 +172,14 @@ impl<R: Runtime> McpManager<R> {
                         "stderr" => ServerEvent::Stderr(data_chunk_bytes.to_vec()),
                         _ => unreachable!(),
                     };
-                    app_handle.emit(&event_name, event_payload)
-                        .map_err(|e| eprintln!("[{}] Failed to emit {} event: {}", server_id, stream_name, e))
+                    app_handle
+                        .emit(&event_name, event_payload)
+                        .map_err(|e| {
+                            eprintln!(
+                                "[{}] Failed to emit {} event: {}",
+                                server_id, stream_name, e
+                            )
+                        })
                         .ok();
                 }
                 Err(e) => {
@@ -168,9 +193,12 @@ impl<R: Runtime> McpManager<R> {
     }
 
     pub async fn send_to_mcp_server(&self, payload: SendRequest) -> crate::Result<()> {
-        let stdin_arc = { // Scoped lock to get stdin Arc
+        let stdin_arc = {
+            // Scoped lock to get stdin Arc
             let servers_guard = self.servers.lock().await;
-            servers_guard.get(&payload.server_id).map(|p| p.stdin.clone()) // Clone stdin Arc if found
+            servers_guard
+                .get(&payload.server_id)
+                .map(|p| p.stdin.clone()) // Clone stdin Arc if found
         };
 
         if let Some(stdin_arc) = stdin_arc {
@@ -186,7 +214,10 @@ impl<R: Runtime> McpManager<R> {
                     // If write fails, the process likely exited.
                     // Map BrokenPipe or other relevant IO errors to ServerNotFound.
                     if e.kind() == std::io::ErrorKind::BrokenPipe {
-                        println!("[{}] Send failed: Pipe broken (process likely exited).", payload.server_id);
+                        println!(
+                            "[{}] Send failed: Pipe broken (process likely exited).",
+                            payload.server_id
+                        );
                         Err(crate::Error::ServerNotFound(payload.server_id))
                     } else {
                         eprintln!("[{}] Error writing to stdin: {}", payload.server_id, e);
@@ -196,7 +227,10 @@ impl<R: Runtime> McpManager<R> {
             }
         } else {
             // Not found in map, could be it exited and was cleaned up, or never existed.
-            println!("[{}] Send failed: Server not found in map.", payload.server_id);
+            println!(
+                "[{}] Send failed: Server not found in map.",
+                payload.server_id
+            );
             Err(crate::Error::ServerNotFound(payload.server_id))
         }
     }
@@ -204,13 +238,16 @@ impl<R: Runtime> McpManager<R> {
     pub async fn kill_mcp_server(&self, payload: KillRequest) -> crate::Result<()> {
         let managed_process = {
             let mut servers_guard = self.servers.lock().await; // Lock map
-            // Remove the entry to prevent further sends and get PID
+                                                               // Remove the entry to prevent further sends and get PID
             servers_guard.remove(&payload.server_id)
         };
 
         if let Some(process_info) = managed_process {
             let pid_to_kill = Pid::from_u32(process_info.pid);
-            println!("[{}] Attempting to kill process with PID: {}", payload.server_id, pid_to_kill);
+            println!(
+                "[{}] Attempting to kill process with PID: {}",
+                payload.server_id, pid_to_kill
+            );
 
             // Use sysinfo to kill the process by PID
             let mut sys = System::new();
@@ -221,15 +258,18 @@ impl<R: Runtime> McpManager<R> {
             let killed = match sys.process(pid_to_kill) {
                 Some(process) => {
                     if process.kill() {
-                         println!("[{}] Kill signal sent successfully to PID: {}. Wait task will handle exit event.", payload.server_id, pid_to_kill);
-                         true
+                        println!("[{}] Kill signal sent successfully to PID: {}. Wait task will handle exit event.", payload.server_id, pid_to_kill);
+                        true
                     } else {
-                         eprintln!("[{}] Failed to send kill signal to PID: {}. Process might have exited already.", payload.server_id, pid_to_kill);
-                         false // Kill signal failed
+                        eprintln!("[{}] Failed to send kill signal to PID: {}. Process might have exited already.", payload.server_id, pid_to_kill);
+                        false // Kill signal failed
                     }
                 }
                 None => {
-                    eprintln!("[{}] Process with PID: {} not found by sysinfo. Already exited?", payload.server_id, pid_to_kill);
+                    eprintln!(
+                        "[{}] Process with PID: {} not found by sysinfo. Already exited?",
+                        payload.server_id, pid_to_kill
+                    );
                     false // Process not found
                 }
             };
@@ -242,10 +282,12 @@ impl<R: Runtime> McpManager<R> {
                 // We could potentially return Ok here if process not found, depends on desired semantics.
                 Err(crate::Error::KillSignalFailed(payload.server_id.clone()))
             }
-
         } else {
             // Process not found in map, likely already exited naturally and cleaned up by wait task.
-             println!("[{}] Kill failed: Server not found in map (already exited/removed?).", payload.server_id);
+            println!(
+                "[{}] Kill failed: Server not found in map (already exited/removed?).",
+                payload.server_id
+            );
             Err(crate::Error::ServerNotFound(payload.server_id))
         }
     }

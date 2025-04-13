@@ -6,20 +6,20 @@ import { ref } from "vue";
 
 // Define Tool interface
 interface Tool {
-	name: string;
-	description?: string;
+  name: string;
+  description?: string;
 }
 
 // Simplified ServerState interface
 interface ServerState {
-	id: string;
-	name: string;
-	client: Client | null;
-	isConnected: boolean;
-	isConnecting: boolean;
-	connectionError: string | null;
-	tools: Tool[];
-	parameters: StdioServerParameters;
+  id: string;
+  name: string;
+  client: Client | null;
+  isConnected: boolean;
+  isConnecting: boolean;
+  connectionError: string | null;
+  tools: Tool[];
+  parameters: StdioServerParameters;
 }
 
 // Reactive state with types
@@ -33,202 +33,206 @@ const errorMsg = ref<string>("");
 
 // Helper function for validating StdioServerParameters JSON
 function validateServerParams(jsonString: string): {
-	params: StdioServerParameters | null;
-	error: string | null;
+  params: StdioServerParameters | null;
+  error: string | null;
 } {
-	try {
-		const parsedJson = JSON.parse(jsonString);
-		if (
-			typeof parsedJson !== "object" ||
-			parsedJson === null ||
-			typeof parsedJson.command !== "string" ||
-			!parsedJson.command ||
-			!Array.isArray(parsedJson.args) ||
-			!parsedJson.args.every((arg: string) => typeof arg === "string") ||
-			(parsedJson.env !== undefined &&
-				(typeof parsedJson.env !== "object" ||
-					parsedJson.env === null ||
-					Array.isArray(parsedJson.env)))
-		) {
-			return {
-				params: null,
-				error:
-					'Invalid JSON structure. Expected { "command": string, "args": string[], "env"?: { [key: string]: string } }.',
-			};
-		}
-		if (parsedJson.env) {
-			for (const key in parsedJson.env) {
-				if (typeof parsedJson.env[key] !== "string") {
-					return {
-						params: null,
-						error: `Invalid JSON structure. Environment variable "${key}" must be a string.`,
-					};
-				}
-			}
-		}
+  try {
+    const parsedJson = JSON.parse(jsonString);
+    if (
+      typeof parsedJson !== "object" ||
+      parsedJson === null ||
+      typeof parsedJson.command !== "string" ||
+      !parsedJson.command ||
+      !Array.isArray(parsedJson.args) ||
+      !parsedJson.args.every((arg: string) => typeof arg === "string") ||
+      (parsedJson.env !== undefined &&
+        (typeof parsedJson.env !== "object" ||
+          parsedJson.env === null ||
+          Array.isArray(parsedJson.env)))
+    ) {
+      return {
+        params: null,
+        error:
+          'Invalid JSON structure. Expected { "command": string, "args": string[], "env"?: { [key: string]: string } }.',
+      };
+    }
+    if (parsedJson.env) {
+      for (const key in parsedJson.env) {
+        if (typeof parsedJson.env[key] !== "string") {
+          return {
+            params: null,
+            error: `Invalid JSON structure. Environment variable "${key}" must be a string.`,
+          };
+        }
+      }
+    }
 
-		return {
-			params: {
-				command: parsedJson.command,
-				args: parsedJson.args,
-				env: parsedJson.env,
-			},
-			error: null,
-		};
-	} catch (jsonError: unknown) {
-		const message =
-			jsonError instanceof Error ? jsonError.message : String(jsonError);
-		return { params: null, error: `Invalid JSON format: ${message}` };
-	}
+    return {
+      params: {
+        command: parsedJson.command,
+        args: parsedJson.args,
+        env: parsedJson.env,
+      },
+      error: null,
+    };
+  } catch (jsonError: unknown) {
+    const message =
+      jsonError instanceof Error ? jsonError.message : String(jsonError);
+    return { params: null, error: `Invalid JSON format: ${message}` };
+  }
 }
 
 async function addServer(): Promise<void> {
-	const name = newServerName.value.trim();
-	const paramsJson = newServerParamsJson.value.trim();
+  const name = newServerName.value.trim();
+  const paramsJson = newServerParamsJson.value.trim();
 
-	if (!name || !paramsJson) {
-		errorMsg.value = "Server name and parameters JSON cannot be empty.";
-		return;
-	}
+  if (!name || !paramsJson) {
+    errorMsg.value = "Server name and parameters JSON cannot be empty.";
+    return;
+  }
 
-	const validationResult = validateServerParams(paramsJson);
-	if (validationResult.error) {
-		errorMsg.value = validationResult.error;
-		return;
-	}
-	const params = validationResult.params;
-	if (!params) {
-		errorMsg.value = "Failed to parse server parameters.";
-		return;
-	}
+  const validationResult = validateServerParams(paramsJson);
+  if (validationResult.error) {
+    errorMsg.value = validationResult.error;
+    return;
+  }
+  const params = validationResult.params;
+  if (!params) {
+    errorMsg.value = "Failed to parse server parameters.";
+    return;
+  }
 
-	isLoading.value = true;
-	errorMsg.value = "";
+  isLoading.value = true;
+  errorMsg.value = "";
 
-	try {
-		const newServerId = `server-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+  try {
+    const newServerId = `server-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
-		servers.value.push({
-			id: newServerId,
-			name: name,
-			client: null,
-			isConnected: false,
-			isConnecting: false,
-			connectionError: null,
-			tools: [],
-			parameters: params,
-		});
+    servers.value.push({
+      id: newServerId,
+      name: name,
+      client: null,
+      isConnected: false,
+      isConnecting: false,
+      connectionError: null,
+      tools: [],
+      parameters: params,
+    });
 
-		// Clear the form
-		newServerName.value = "";
-		newServerParamsJson.value = "";
-	} catch (err: unknown) {
-		console.error("Failed to add server:", err);
-		const message = err instanceof Error ? err.message : JSON.stringify(err);
-		errorMsg.value = `Failed to add server: ${message}`;
-	} finally {
-		isLoading.value = false;
-	}
+    // Clear the form
+    newServerName.value = "";
+    newServerParamsJson.value = "";
+  } catch (err: unknown) {
+    console.error("Failed to add server:", err);
+    const message = err instanceof Error ? err.message : JSON.stringify(err);
+    errorMsg.value = `Failed to add server: ${message}`;
+  } finally {
+    isLoading.value = false;
+  }
 }
 
 async function removeServer(index: number): Promise<void> {
-	const server = servers.value[index];
-	if (!server) return;
+  const server = servers.value[index];
+  if (!server) return;
 
-	// Disconnect if connected
-	if (server.isConnected && server.client) {
-		try {
-			await disconnectFromServer(index);
-		} catch (err) {
-			console.error(`Error disconnecting server ${server.name} during removal:`, err);
-		}
-	}
+  // Disconnect if connected
+  if (server.isConnected && server.client) {
+    try {
+      await disconnectFromServer(index);
+    } catch (err) {
+      console.error(
+        `Error disconnecting server ${server.name} during removal:`,
+        err,
+      );
+    }
+  }
 
-	// Remove server from the list
-	servers.value.splice(index, 1);
+  // Remove server from the list
+  servers.value.splice(index, 1);
 }
 
 async function connectToServer(index: number): Promise<void> {
-	const server = servers.value[index];
-	if (!server || server.isConnected || server.client || server.isConnecting) return;
+  const server = servers.value[index];
+  if (!server || server.isConnected || server.client || server.isConnecting)
+    return;
 
-	server.connectionError = null;
-	errorMsg.value = "";
-	server.isConnecting = true;
+  server.connectionError = null;
+  errorMsg.value = "";
+  server.isConnecting = true;
 
-	try {
-		const client = new Client({ name: "TauriAppClient", version: "0.1.0" });
-		await client.connect(new TauriStdioTransport(server.parameters));
-		console.log(`Connected to ${server.name}`);
+  try {
+    const client = new Client({ name: "TauriAppClient", version: "0.1.0" });
+    await client.connect(new TauriStdioTransport(server.parameters));
+    console.log(`Connected to ${server.name}`);
 
-		server.client = client;
-		server.isConnected = true;
-		await listTools(index);
-	} catch (err: unknown) {
-		console.error(`Failed to connect to server ${server.name}:`, err);
-		const message = err instanceof Error ? err.message : JSON.stringify(err);
-		server.connectionError = `Connection failed: ${message}`;
-		server.client = null;
-		server.isConnected = false;
-	} finally {
-		server.isConnecting = false;
-	}
+    server.client = client;
+    server.isConnected = true;
+    await listTools(index);
+  } catch (err: unknown) {
+    console.error(`Failed to connect to server ${server.name}:`, err);
+    const message = err instanceof Error ? err.message : JSON.stringify(err);
+    server.connectionError = `Connection failed: ${message}`;
+    server.client = null;
+    server.isConnected = false;
+  } finally {
+    server.isConnecting = false;
+  }
 }
 
 async function disconnectFromServer(index: number): Promise<void> {
-	const server = servers.value[index];
-	if (!server || !server.isConnected || !server.client) return;
+  const server = servers.value[index];
+  if (!server || !server.isConnected || !server.client) return;
 
-	console.log(`Disconnecting from ${server.name}...`);
+  console.log(`Disconnecting from ${server.name}...`);
 
-	try {
-		// Let the client handle the disconnection
-		server.client = null;
-		server.isConnected = false;
-		server.tools = [];
-		server.connectionError = null;
-	} catch (err: unknown) {
-		console.error(`Error during disconnect for ${server.name}:`, err);
-		const message = err instanceof Error ? err.message : JSON.stringify(err);
-		server.connectionError = `Disconnection error: ${message}`;
-	}
+  try {
+    // Let the client handle the disconnection
+    server.client = null;
+    server.isConnected = false;
+    server.tools = [];
+    server.connectionError = null;
+  } catch (err: unknown) {
+    console.error(`Error during disconnect for ${server.name}:`, err);
+    const message = err instanceof Error ? err.message : JSON.stringify(err);
+    server.connectionError = `Disconnection error: ${message}`;
+  }
 }
 
 async function listTools(index: number): Promise<void> {
-	const server = servers.value[index];
-	if (!server || !server.isConnected || !server.client) {
-		console.warn(
-			`Cannot list tools for server at index ${index}: Not connected or no client.`,
-		);
-		return;
-	}
+  const server = servers.value[index];
+  if (!server || !server.isConnected || !server.client) {
+    console.warn(
+      `Cannot list tools for server at index ${index}: Not connected or no client.`,
+    );
+    return;
+  }
 
-	try {
-		console.log(`Listing tools for ${server.name}...`);
-		server.connectionError = null;
-		
-		const result = await server.client.listTools();
-		console.log(`Raw result from listTools for ${server.name}:`, result);
+  try {
+    console.log(`Listing tools for ${server.name}...`);
+    server.connectionError = null;
 
-		let foundTools: Tool[] = [];
-		if (result && typeof result === "object" && Array.isArray(result.tools)) {
-			foundTools = result.tools as Tool[];
-		} else if (Array.isArray(result)) {
-			foundTools = result as Tool[];
-		} else {
-			console.warn(
-				`Unexpected format returned by listTools for ${server.name}. Expected an object with a 'tools' array or an array.`,
-				result,
-			);
-		}
-		server.tools = foundTools;
-		console.log(`Processed tools for ${server.name}:`, server.tools);
-	} catch (err: unknown) {
-		console.error(`Failed to list tools for ${server.name}:`, err);
-		const message = err instanceof Error ? err.message : JSON.stringify(err);
-		server.connectionError = `Failed to list tools: ${message}`;
-		server.tools = [];
-	}
+    const result = await server.client.listTools();
+    console.log(`Raw result from listTools for ${server.name}:`, result);
+
+    let foundTools: Tool[] = [];
+    if (result && typeof result === "object" && Array.isArray(result.tools)) {
+      foundTools = result.tools as Tool[];
+    } else if (Array.isArray(result)) {
+      foundTools = result as Tool[];
+    } else {
+      console.warn(
+        `Unexpected format returned by listTools for ${server.name}. Expected an object with a 'tools' array or an array.`,
+        result,
+      );
+    }
+    server.tools = foundTools;
+    console.log(`Processed tools for ${server.name}:`, server.tools);
+  } catch (err: unknown) {
+    console.error(`Failed to list tools for ${server.name}:`, err);
+    const message = err instanceof Error ? err.message : JSON.stringify(err);
+    server.connectionError = `Failed to list tools: ${message}`;
+    server.tools = [];
+  }
 }
 
 // async function getServerStatus(serverId: string): Promise<void> {

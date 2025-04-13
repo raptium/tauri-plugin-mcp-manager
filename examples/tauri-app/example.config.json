@@ -1,4 +1,4 @@
 {
-	"command": "npx",
-	"args": ["-y", "@modelcontextprotocol/server-filesystem", "D:\\"]
+  "command": "npx",
+  "args": ["-y", "@modelcontextprotocol/server-filesystem", "D:\\"]
 }

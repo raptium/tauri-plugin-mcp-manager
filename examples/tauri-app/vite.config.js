@@ -5,22 +5,22 @@ const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
 export default defineConfig({
-	plugins: [vue()],
+  plugins: [vue()],
 
-	// Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
-	// prevent Vite from obscuring rust errors
-	clearScreen: false,
-	// tauri expects a fixed port, fail if that port is not available
-	server: {
-		host: host || false,
-		port: 3000,
-		strictPort: true,
-		hmr: host
-			? {
-					protocol: "ws",
-					host,
-					port: 3001,
-				}
-			: undefined,
-	},
+  // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
+  // prevent Vite from obscuring rust errors
+  clearScreen: false,
+  // tauri expects a fixed port, fail if that port is not available
+  server: {
+    host: host || false,
+    port: 3000,
+    strictPort: true,
+    hmr: host
+      ? {
+          protocol: "ws",
+          host,
+          port: 3001,
+        }
+      : undefined,
+  },
 });

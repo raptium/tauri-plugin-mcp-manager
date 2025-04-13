@@ -1,8 +1,8 @@
-use tauri::{AppHandle, command, Runtime};
+use tauri::{command, AppHandle, Runtime};
 
 use crate::models::*;
-use crate::Result;
 use crate::McpManagerExt;
+use crate::Result;
 
 #[command]
 pub(crate) async fn start_mcp_server<R: Runtime>(
