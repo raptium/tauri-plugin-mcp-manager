@@ -1,35 +1,6 @@
-import { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
-import { type StdioServerParameters } from "@modelcontextprotocol/sdk/client/stdio.js";
-export declare class ReadBuffer {
-    private _buffer;
-    private _decoder;
-    append(chunk: Uint8Array): void;
-    readMessage(): {
-        method: string;
-        jsonrpc: "2.0";
-        params?: import("zod").objectOutputType<{
-            _meta: import("zod").ZodOptional<import("zod").ZodObject<{}, "passthrough", import("zod").ZodTypeAny, import("zod").objectOutputType<{}, import("zod").ZodTypeAny, "passthrough">, import("zod").objectInputType<{}, import("zod").ZodTypeAny, "passthrough">>>;
-        }, import("zod").ZodTypeAny, "passthrough"> | undefined;
-    } | {
-        jsonrpc: "2.0";
-        id: string | number;
-        result: {
-            _meta?: import("zod").objectOutputType<{}, import("zod").ZodTypeAny, "passthrough"> | undefined;
-        } & {
-            [k: string]: unknown;
-        };
-    } | {
-        jsonrpc: "2.0";
-        id: string | number;
-        error: {
-            code: number;
-            message: string;
-            data?: unknown;
-        };
-    } | null;
-    clear(): void;
-}
+import type { StdioServerParameters } from "@modelcontextprotocol/sdk/client/stdio.js";
+import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
+import { type JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 export declare function deserializeMessage(line: string): {
     method: string;
     jsonrpc: "2.0";
@@ -70,7 +41,6 @@ export declare function serializeMessage(message: JSONRPCMessage): string;
 export declare class TauriStdioTransport implements Transport {
     private _serverParams;
     private _serverId?;
-    private _readBuffer;
     onclose?: () => void;
     onerror?: (error: Error) => void;
     onmessage?: (message: JSONRPCMessage) => void;
@@ -78,5 +48,4 @@ export declare class TauriStdioTransport implements Transport {
     start(): Promise<void>;
     close(): Promise<void>;
     send(message: JSONRPCMessage): Promise<void>;
-    private processReadBuffer;
 }

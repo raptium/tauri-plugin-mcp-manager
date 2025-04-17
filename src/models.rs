@@ -39,7 +39,7 @@ pub struct SendRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", content = "payload", rename_all = "camelCase")]
 pub enum ServerEvent {
-    Stdout(Vec<u8>),
+    Line(String), // Line from stdout
     Stderr(Vec<u8>),
     Exit(Option<i32>),
 }

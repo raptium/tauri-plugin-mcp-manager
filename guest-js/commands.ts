@@ -1,72 +1,72 @@
-import { invoke } from '@tauri-apps/api/core'
-import { listen, type Event } from '@tauri-apps/api/event'
+import { invoke } from "@tauri-apps/api/core";
+import { type Event, listen } from "@tauri-apps/api/event";
 
 // --- Type Definitions (mirroring Rust structs) ---
 
 export interface StdioServerParams {
-  command: string;
-  args: string[];
-  env?: Record<string, string>;
+	command: string;
+	args: string[];
+	env?: Record<string, string>;
 }
 
 export interface StartRequest {
-  params: StdioServerParams;
+	params: StdioServerParams;
 }
 
 export interface StartResponse {
-  serverId: string; // Internal UUID
+	serverId: string; // Internal UUID
 }
 
 export interface ServerIdPayload {
-  serverId: string;
+	serverId: string;
 }
 
 export type KillRequest = ServerIdPayload;
 
 export interface SendRequest {
-  serverId: string; // Use serverId instead of name
-  data: string;
+	serverId: string; // Use serverId instead of name
+	data: string;
 }
 
 // --- Server Events (mirroring Rust enum ServerEvent) ---
 
 // Represents the payload for the 'stdout' variant of ServerEvent
-interface ServerEventStdout {
-  type: "stdout";
-  payload: number[]; // Corresponds to Vec<u8>
+interface ServerEventLine {
+	type: "line";
+	payload: string; // Corresponds to String
 }
 
 // Represents the payload for the 'stderr' variant of ServerEvent
 interface ServerEventStderr {
-  type: "stderr";
-  payload: number[]; // Corresponds to Vec<u8>
+	type: "stderr";
+	payload: number[]; // Corresponds to Vec<u8>
 }
 
 // Represents the payload for the 'exit' variant of ServerEvent
 interface ServerEventExit {
-  type: "exit";
-  payload: number | null; // Corresponds to Option<i32>
+	type: "exit";
+	payload: number | null; // Corresponds to Option<i32>
 }
 
 // Discriminated union type for all possible server events
-export type ServerEvent = ServerEventStdout | ServerEventStderr | ServerEventExit;
+export type ServerEvent = ServerEventLine | ServerEventStderr | ServerEventExit;
 
 // --- Plugin Commands ---
 
 const PLUGIN_NAME = "mcp-manager";
 
 export async function startMcpServer(
-  payload: StartRequest
+	payload: StartRequest,
 ): Promise<StartResponse> {
-  return await invoke(`plugin:${PLUGIN_NAME}|start_mcp_server`, { payload });
+	return await invoke(`plugin:${PLUGIN_NAME}|start_mcp_server`, { payload });
 }
 
 export async function sendToMcpServer(payload: SendRequest): Promise<void> {
-  await invoke(`plugin:${PLUGIN_NAME}|send_to_mcp_server`, { payload });
+	await invoke(`plugin:${PLUGIN_NAME}|send_to_mcp_server`, { payload });
 }
 
 export async function killMcpServer(payload: KillRequest): Promise<void> {
-  await invoke(`plugin:${PLUGIN_NAME}|kill_mcp_server`, { payload });
+	await invoke(`plugin:${PLUGIN_NAME}|kill_mcp_server`, { payload });
 }
 
 // --- Event Listening ---
@@ -80,11 +80,11 @@ export async function killMcpServer(payload: KillRequest): Promise<void> {
  * @returns A promise that resolves to an unlisten function.
  */
 export async function listenToMcpServer(
-  serverId: string,
-  onMessage: (payload: ServerEvent) => void
+	serverId: string,
+	onMessage: (payload: ServerEvent) => void,
 ): Promise<() => void> {
-  const eventName = `mcp://message/${serverId}`;
-  return await listen<ServerEvent>(eventName, (event: Event<ServerEvent>) => {
-    onMessage(event.payload);
-  });
+	const eventName = `mcp://message/${serverId}`;
+	return await listen<ServerEvent>(eventName, (event: Event<ServerEvent>) => {
+		onMessage(event.payload);
+	});
 }

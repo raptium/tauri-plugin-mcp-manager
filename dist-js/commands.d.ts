@@ -17,9 +17,9 @@ export interface SendRequest {
     serverId: string;
     data: string;
 }
-interface ServerEventStdout {
-    type: "stdout";
-    payload: number[];
+interface ServerEventLine {
+    type: "line";
+    payload: string;
 }
 interface ServerEventStderr {
     type: "stderr";
@@ -29,7 +29,7 @@ interface ServerEventExit {
     type: "exit";
     payload: number | null;
 }
-export type ServerEvent = ServerEventStdout | ServerEventStderr | ServerEventExit;
+export type ServerEvent = ServerEventLine | ServerEventStderr | ServerEventExit;
 export declare function startMcpServer(payload: StartRequest): Promise<StartResponse>;
 export declare function sendToMcpServer(payload: SendRequest): Promise<void>;
 export declare function killMcpServer(payload: KillRequest): Promise<void>;

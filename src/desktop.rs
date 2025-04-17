@@ -1,7 +1,7 @@
 use serde::de::DeserializeOwned;
 use tauri::{plugin::PluginApi, AppHandle, Emitter, Runtime};
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt, BufReader},
+    io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     process::{ChildStdin, Command},
     sync::Mutex,
 };
@@ -149,43 +149,72 @@ impl<R: Runtime> McpManager<R> {
         Ok(StartResponse { server_id })
     }
 
-    // Reads from the stream in chunks and emits events eagerly.
     async fn listen_to_stream<T: tokio::io::AsyncRead + Unpin>(
         app_handle: AppHandle<R>,
         server_id: String,
-        mut stream: T,
+        stream: T,
         stream_name: &str,
     ) {
-        let mut buf = [0; 1024]; // Read buffer
+        match stream_name {
+            "stdout" => {
+                let mut reader = BufReader::new(stream);
+                let mut line = String::new();
 
-        loop {
-            match stream.read(&mut buf).await {
-                Ok(0) => break, // EOF
-                Ok(n) => {
-                    let data_chunk_bytes = &buf[0..n]; // Reference the raw byte slice
-                    let event_name = format!("mcp://message/{}", server_id);
-                    let event_payload = match stream_name {
-                        // Clone the byte slice into a Vec<u8>
-                        "stdout" => ServerEvent::Stdout(data_chunk_bytes.to_vec()),
-                        "stderr" => ServerEvent::Stderr(data_chunk_bytes.to_vec()),
-                        _ => unreachable!(),
-                    };
-                    app_handle
-                        .emit(&event_name, event_payload)
-                        .map_err(|e| {
-                            eprintln!(
-                                "[{}] Failed to emit {} event: {}",
-                                server_id, stream_name, e
-                            )
-                        })
-                        .ok();
-                }
-                Err(e) => {
-                    eprintln!("[{}] Error reading from {}: {}", server_id, stream_name, e);
-                    break; // Stop reading on error
+                loop {
+                    match reader.read_line(&mut line).await {
+                        Ok(0) => break, // EOF
+                        Ok(_) => {
+                            // Trim the trailing newline if present
+                            if line.ends_with('\n') {
+                                line.pop();
+                                if line.ends_with('\r') {
+                                    line.pop();
+                                }
+                            }
+
+                            let event_name = format!("mcp://message/{}", server_id);
+                            app_handle
+                                .emit(&event_name, ServerEvent::Line(line.clone()))
+                                .map_err(|e| {
+                                    eprintln!("[{}] Failed to emit stdout line: {}", server_id, e)
+                                })
+                                .ok();
+
+                            line.clear(); // Reuse the string buffer
+                        }
+                        Err(e) => {
+                            eprintln!("[{}] Error reading from stdout: {}", server_id, e);
+                            break;
+                        }
+                    }
                 }
             }
+            "stderr" => {
+                let mut reader = BufReader::new(stream);
+                let mut buf = [0; 1024];
+
+                loop {
+                    match reader.read(&mut buf).await {
+                        Ok(0) => break, // EOF
+                        Ok(n) => {
+                            let event_name = format!("mcp://message/{}", server_id);
+                            app_handle
+                                .emit(&event_name, ServerEvent::Stderr(buf[..n].to_vec()))
+                                .map_err(|e| {
+                                    eprintln!("[{}] Failed to emit stderr: {}", server_id, e)
+                                })
+                                .ok();
+                        }
+                        Err(e) => {
+                            eprintln!("[{}] Error reading from stderr: {}", server_id, e);
+                            break;
+                        }
+                    }
+                }
+            }
+            _ => unreachable!(),
         }
+
         println!("[{}:{}] Stream closed.", server_id, stream_name);
         // Cleanup is handled by the separate wait task.
     }

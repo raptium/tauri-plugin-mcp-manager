@@ -1,4 +1,4 @@
 {
-    "*.{js,ts,vue,json,md}": "biome check --write",
-    "*.rs": "cargo fmt"
+    "src/**/*.{js,ts,vue,json,md}": "biome check --write",
+    "*.rs": "rustfmt --edition 2021"
 }
